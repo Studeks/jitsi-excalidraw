@@ -63,7 +63,11 @@ import { LocalData } from "../../../excalidraw-app/data/LocalData";
 import { isBrowserStorageStateNewer } from "../../../excalidraw-app/data/tabSync";
 import clsx from "clsx";
 import { Provider, useAtom } from "jotai";
-import { jotaiScope, jotaiStore, useAtomWithInitialValue } from "../../../jotai";
+import {
+  jotaiScope,
+  jotaiStore,
+  useAtomWithInitialValue,
+} from "../../../jotai";
 import { reconcileElements } from "../../../excalidraw-app/collab/reconciliation";
 import {
   parseLibraryTokensFromUrl,
@@ -240,7 +244,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
       return;
     }
 
-    const loadImages = (
+    const loadImages = async (
       data: ResolutionType<typeof initializeScene>,
       isInitialLoad = false,
     ) => {
@@ -278,36 +282,48 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
 
         if (data.isExternalScene) {
           // Custom external scene - skip for now as it requires collaborative server setup
-          console.warn("External scene image loading not implemented for custom S3");
+          console.warn(
+            "External scene image loading not implemented for custom S3",
+          );
         } else if (isInitialLoad) {
           if (fileIds.length && onImageDownload) {
             // Load files from custom S3 handlers
             const loadedFiles: BinaryFileData[] = [];
             const erroredFiles = new Map<FileId, true>();
 
-            for (const fileId of fileIds) {
+            // Load files sequentially to avoid issues with async/await in build
+            const loadFilePromises = fileIds.map(async (fileId) => {
               try {
                 const response = await onImageDownload(fileId);
                 if (response) {
-                  loadedFiles.push({
+                  return {
                     id: fileId,
                     dataURL: response.dataURL,
                     mimeType: "image/png", // Default to PNG, could be enhanced to detect actual type
                     created: Date.now(),
-                  });
+                  };
                 } else {
                   erroredFiles.set(fileId, true);
+                  return null;
                 }
               } catch (error) {
                 console.error(`Failed to load image ${fileId}:`, error);
                 erroredFiles.set(fileId, true);
+                return null;
               }
-            }
+            });
+
+            const results = await Promise.all(loadFilePromises);
+            loadedFiles.push(
+              ...results.filter(
+                (file): file is BinaryFileData => file !== null,
+              ),
+            );
 
             if (loadedFiles.length) {
               excalidrawAPI.addFiles(loadedFiles);
             }
-            
+
             if (erroredFiles.size || loadedFiles.length) {
               updateStaleImageStatuses({
                 excalidrawAPI,
@@ -324,7 +340,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
     };
 
     initializeScene({ collabAPI }).then(async (data) => {
-      loadImages(data, /* isInitialLoad */ true);
+      await loadImages(data, /* isInitialLoad */ true);
 
       initialStatePromiseRef.current.promise.resolve({
         ...data.scene,
@@ -355,8 +371,8 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
         }
         excalidrawAPI.updateScene({ appState: { isLoading: true } });
 
-        initializeScene({ collabAPI }).then((data) => {
-          loadImages(data);
+        initializeScene({ collabAPI }).then(async (data) => {
+          await loadImages(data);
           if (data.scene) {
             excalidrawAPI.updateScene({
               ...data.scene,
@@ -417,29 +433,39 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
                 const loadedFiles: BinaryFileData[] = [];
                 const erroredFiles = new Map<FileId, true>();
 
-                for (const fileId of fileIds) {
+                // Load files with Promise.all to avoid build issues
+                const loadFilePromises = fileIds.map(async (fileId) => {
                   try {
                     const response = await onImageDownload(fileId);
                     if (response) {
-                      loadedFiles.push({
+                      return {
                         id: fileId,
                         dataURL: response.dataURL,
                         mimeType: "image/png", // Default to PNG, could be enhanced to detect actual type
                         created: Date.now(),
-                      });
+                      };
                     } else {
                       erroredFiles.set(fileId, true);
+                      return null;
                     }
                   } catch (error) {
                     console.error(`Failed to load image ${fileId}:`, error);
                     erroredFiles.set(fileId, true);
+                    return null;
                   }
-                }
+                });
+
+                const results = await Promise.all(loadFilePromises);
+                loadedFiles.push(
+                  ...results.filter(
+                    (file): file is BinaryFileData => file !== null,
+                  ),
+                );
 
                 if (loadedFiles.length) {
                   excalidrawAPI.addFiles(loadedFiles);
                 }
-                
+
                 if (erroredFiles.size || loadedFiles.length) {
                   updateStaleImageStatuses({
                     excalidrawAPI,
