@@ -34,24 +34,37 @@ jobs:
           # Build with type generation (now that we have @types/minimatch)
           CI=false yarn build:umd:with-types
 
-      - name: Create package tarball
+      - name: Create package structure and tarball
         run: |
           cd src/packages/excalidraw
-          yarn pack
+          # Create a temporary directory for the package structure
+          mkdir -p ../../../temp_package/package
+
+          # Copy built files to the package directory
+          cp -r dist/ ../../../temp_package/package/
+          cp -r types/ ../../../temp_package/package/
+          cp package.json ../../../temp_package/package/
+          cp main.js ../../../temp_package/package/
+          cp README.md ../../../temp_package/package/
+
+          # Get version from tag
+          VERSION=${GITHUB_REF#refs/tags/v}
+
+          # Create tarball from temp_package so it contains package/ when extracted
+          cd ../../../temp_package
+          tar -czf ../jitsi-excalidraw-${VERSION}.tgz package/
+
+          # Move tarball to workspace root
+          mv ../jitsi-excalidraw-${VERSION}.tgz ../
 
       - name: Get version from tag
         id: get_version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
-      - name: Rename tarball
-        run: |
-          cd src/packages/excalidraw
-          mv jitsi-excalidraw-*.tgz jitsi-excalidraw-${{ steps.get_version.outputs.VERSION }}.tgz
-
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: src/packages/excalidraw/jitsi-excalidraw-${{ steps.get_version.outputs.VERSION }}.tgz
+          files: jitsi-excalidraw-${{ steps.get_version.outputs.VERSION }}.tgz
           tag_name: ${{ github.ref }}
           name: Release ${{ steps.get_version.outputs.VERSION }}
           draft: false
