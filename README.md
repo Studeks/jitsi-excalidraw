@@ -70,9 +70,9 @@ https://excalidraw.com/#room=[0-9a-f]{20},[a-zA-Z0-9_-]{22}
 https://excalidraw.com/#room=91bd46ae3aa84dff9d20,pfLqgEoY1c2ioq8LmGwsFA
 ```
 
-The first set of digits is the room. This is visible from the server that’s going to dispatch messages to everyone that knows this number.
+The first set of digits is the room. This is visible from the server that's going to dispatch messages to everyone that knows this number.
 
-The second set of digits is the encryption key. The Excalidraw server doesn’t know about it. This is what all the participants use to encrypt/decrypt the messages.
+The second set of digits is the encryption key. The Excalidraw server doesn't know about it. This is what all the participants use to encrypt/decrypt the messages.
 
 > Note: Please ensure that the encryption key is 22 characters long.
 
@@ -199,3 +199,129 @@ Pull requests are welcome. For major changes, please [open an issue](https://git
 - [Vercel](https://vercel.com)
 
 And the main source of inspiration for starting the project is the awesome [Zwibbler](https://zwibbler.com/demo/) app.
+
+## Custom Image Upload Support
+
+This fork of Excalidraw supports custom image upload functionality, allowing you to upload images to your own storage backend instead of using the default Firebase storage.
+
+### Using Custom Image Upload
+
+To enable custom image upload, pass the `onFileUpload` callback to the `ExcalidrawApp` component:
+
+```tsx
+import { ExcalidrawApp } from "./packages/excalidraw/components/ExcalidrawApp";
+
+// Your upload function - should return a URL to the uploaded image
+const uploadImageToBackend = async (file: File): Promise<string> => {
+  const formData = new FormData();
+  formData.append("image", file);
+
+  const response = await fetch("/api/upload-image", {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    throw new Error("Upload failed");
+  }
+
+  const data = await response.json();
+  return data.imageUrl; // Return the URL where the image is accessible
+};
+
+// Usage
+<ExcalidrawApp
+  collabDetails={collabDetails}
+  collabServerUrl={collabServerUrl}
+  onFileUpload={uploadImageToBackend}
+  excalidraw={{
+    isCollaborating: true,
+    langCode: "en",
+    theme: "light",
+    UIOptions: {
+      canvasActions: {
+        allowedShapes: [
+          "arrow",
+          "diamond",
+          "ellipse",
+          "freedraw",
+          "line",
+          "rectangle",
+          "selection",
+          "text",
+          "image",
+        ],
+        disableFileDrop: false,
+      },
+    },
+  }}
+  getExcalidrawAPI={getExcalidrawAPI}
+  getCollabAPI={getCollabAPI}
+/>;
+```
+
+### Custom Upload Properties
+
+The `ExcalidrawApp` component now supports these additional props:
+
+- `onFileUpload?: (file: File) => Promise<string>` - Custom file upload handler that should return the URL where the uploaded image can be accessed
+- `onFilesChange?: (files: BinaryFiles) => void` - Optional callback to be notified when files in the scene change
+
+### How It Works
+
+1. When a user drags and drops an image or pastes an image, the `onFileUpload` callback is called
+2. Your upload function uploads the image to your storage backend and returns the URL
+3. Excalidraw uses this URL to display the image in the canvas
+4. The URL is used as both the file ID and the image source
+
+### Important Notes
+
+- The `onFileUpload` function should upload the image to a publicly accessible URL
+- The returned URL will be used directly as the image source, so it must be accessible from the browser
+- Images uploaded through this method will be associated with the returned URL as their file ID
+- Make sure your server supports CORS if the images are hosted on a different domain
+
+## Migration from Standard Excalidraw
+
+If you're migrating from standard Excalidraw, you no longer need to implement `generateIdForFile` and `onPaste` callbacks manually. The `onFileUpload` prop handles all image upload scenarios automatically.
+
+Before:
+
+```tsx
+// Old complex implementation
+const handleGenerateIdForFile = async (file: File): Promise<string> => {
+  // Complex upload logic
+};
+
+const handlePaste = async (
+  data: any,
+  event: ClipboardEvent | null,
+): Promise<boolean> => {
+  // Complex paste handling
+};
+
+<ExcalidrawApp
+  excalidraw={{
+    generateIdForFile: handleGenerateIdForFile,
+    onPaste: handlePaste,
+  }}
+/>;
+```
+
+After:
+
+```tsx
+// New simple implementation
+const uploadImage = async (file: File): Promise<string> => {
+  // Simple upload, return URL
+};
+
+<ExcalidrawApp
+  onFileUpload={uploadImage}
+  excalidraw={
+    {
+      // No need for generateIdForFile or onPaste
+    }
+  }
+/>;
+```

@@ -330,6 +330,9 @@ export interface ExcalidrawAppProps {
   excalidraw: ExcalidrawProps;
   getExcalidrawAPI?: Function;
   getCollabAPI?: Function;
+  // Custom file upload support
+  onFileUpload?: (file: File) => Promise<string>;
+  onFilesChange?: (files: BinaryFiles) => void;
 }
 
 export type SceneData = {

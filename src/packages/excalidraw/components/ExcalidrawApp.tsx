@@ -1,5 +1,5 @@
 import LanguageDetector from "i18next-browser-languagedetector";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { trackEvent } from "../../../analytics";
 import { ErrorDialog } from "../../../components/ErrorDialog";
 import { TopErrorBoundary } from "../../../components/TopErrorBoundary";
@@ -188,6 +188,32 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
     currentLangCode = currentLangCode[0];
   }
   const [langCode, setLangCode] = useState(currentLangCode);
+
+  // Custom file upload handling
+  const handleGenerateIdForFile = useCallback(
+    async (file: File): Promise<string> => {
+      if (props.onFileUpload) {
+        try {
+          // Use custom upload handler
+          const fileId = await props.onFileUpload(file);
+          return fileId;
+        } catch (error) {
+          console.error("Custom file upload failed:", error);
+          throw error;
+        }
+      }
+
+      // Fall back to default behavior if no custom handler
+      if (props.excalidraw.generateIdForFile) {
+        return props.excalidraw.generateIdForFile(file);
+      }
+
+      // Default ID generation
+      return (await import("../../../data/blob")).generateIdFromFile(file);
+    },
+    [props.onFileUpload, props.excalidraw.generateIdForFile],
+  );
+
   // initial state
   // ---------------------------------------------------------------------------
 
@@ -209,6 +235,57 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
 
   const [excalidrawAPI, excalidrawRefCallback] =
     useCallbackRefState<ExcalidrawImperativeAPI>();
+
+  const handlePaste = useCallback(
+    async (data: any, event: ClipboardEvent | null): Promise<boolean> => {
+      // If user provided custom paste handler, use it first
+      if (props.excalidraw.onPaste) {
+        const result = await props.excalidraw.onPaste(data, event);
+        if (result === true) {
+          return true; // Custom handler processed the paste
+        }
+      }
+
+      // Handle image files if custom upload is available
+      if (props.onFileUpload && data.files && data.files.length > 0) {
+        const imageFiles = data.files.filter((file: File) =>
+          file.type.startsWith("image/"),
+        );
+        if (imageFiles.length > 0) {
+          try {
+            // Upload files and add them to Excalidraw
+            for (const file of imageFiles) {
+              const fileId = await props.onFileUpload(file);
+
+              // Add file to Excalidraw with remote URL as ID
+              if (excalidrawAPI) {
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const dataURL = reader.result as string;
+                  excalidrawAPI.addFiles([
+                    {
+                      id: fileId as any,
+                      dataURL: dataURL as any,
+                      mimeType: file.type,
+                      created: Date.now(),
+                    },
+                  ]);
+                };
+                reader.readAsDataURL(file);
+              }
+            }
+            return true; // We handled the paste
+          } catch (error) {
+            console.error("Failed to upload pasted images:", error);
+            return false;
+          }
+        }
+      }
+
+      return false; // Let default handling take over
+    },
+    [props.excalidraw.onPaste, props.onFileUpload],
+  );
 
   const [collabAPI] = useAtom(collabAPIAtom);
   const [, setCollabDialogShown] = useAtom(collabDialogShownAtom);
@@ -523,6 +600,11 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
         }
       });
     }
+
+    // Notify parent of file changes if callback provided
+    if (props.onFilesChange) {
+      props.onFilesChange(files);
+    }
   };
 
   return (
@@ -537,6 +619,8 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
         ref={excalidrawRefCallback}
         onChange={onChange}
         initialData={initialStatePromiseRef.current.promise}
+        generateIdForFile={handleGenerateIdForFile}
+        onPaste={handlePaste}
         {...(!props.collabDetails && {
           onCollabButtonClick: () => setCollabDialogShown(true),
         })}

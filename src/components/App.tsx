@@ -4878,21 +4878,32 @@ class App extends React.Component<AppProps, AppState> {
     }
 
     const existingFileData = this.files[fileId];
-    if (!existingFileData?.dataURL) {
-      try {
-        imageFile = await resizeImageFile(imageFile, {
-          maxWidthOrHeight: DEFAULT_MAX_IMAGE_WIDTH_OR_HEIGHT,
-        });
-      } catch (error: any) {
-        console.error("error trying to resing image file on insertion", error);
-      }
 
-      if (imageFile.size > MAX_ALLOWED_FILE_BYTES) {
-        throw new Error(
-          t("errors.fileTooBig", {
-            maxSize: `${Math.trunc(MAX_ALLOWED_FILE_BYTES / 1024 / 1024)}MB`,
-          }),
-        );
+    // Check if fileId is a URL (indicates remote file upload)
+    const isRemoteFile =
+      fileId.startsWith("http://") || fileId.startsWith("https://");
+
+    if (!existingFileData?.dataURL) {
+      if (!isRemoteFile) {
+        // Local file handling - resize and validate size
+        try {
+          imageFile = await resizeImageFile(imageFile, {
+            maxWidthOrHeight: DEFAULT_MAX_IMAGE_WIDTH_OR_HEIGHT,
+          });
+        } catch (error: any) {
+          console.error(
+            "error trying to resize image file on insertion",
+            error,
+          );
+        }
+
+        if (imageFile.size > MAX_ALLOWED_FILE_BYTES) {
+          throw new Error(
+            t("errors.fileTooBig", {
+              maxSize: `${Math.trunc(MAX_ALLOWED_FILE_BYTES / 1024 / 1024)}MB`,
+            }),
+          );
+        }
       }
     }
 
@@ -4906,8 +4917,10 @@ class App extends React.Component<AppProps, AppState> {
       this.setImagePreviewCursor(resizedFile || imageFile);
     }
 
-    const dataURL =
-      this.files[fileId]?.dataURL || (await getDataURL(imageFile));
+    // For remote files, use the URL directly as dataURL; for local files, convert to dataURL
+    const dataURL = isRemoteFile
+      ? (fileId as unknown as DataURL) // Use the URL directly
+      : this.files[fileId]?.dataURL || (await getDataURL(imageFile));
 
     const imageElement = mutateElement(
       _imageElement,
