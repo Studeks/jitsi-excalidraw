@@ -13,6 +13,8 @@ import {
   CollabProps,
   Gesture,
   UserIdleState,
+  BinaryFileData,
+  FileId,
 } from "../../../types";
 import {
   preventUnload,
@@ -118,31 +120,89 @@ class Collab extends PureComponent<CollabProps, CollabState> {
 
     // @ts-ignore
     this.portal = new Portal(this);
-    this.fileManager = new FileManager({
-      getFiles: async (fileIds) => {
-        const { roomId, roomKey } = this.portal;
-        if (!roomId || !roomKey) {
-          throw new AbortError();
-        }
+    
+    // Use custom S3 handlers if provided, otherwise fallback to Firebase
+    if (props.onImageUpload && props.onImageDownload) {
+      this.fileManager = new FileManager({
+        getFiles: async (fileIds) => {
+          const loadedFiles: BinaryFileData[] = [];
+          const erroredFiles = new Map<FileId, true>();
 
-        return loadFilesFromFirebase(`files/rooms/${roomId}`, roomKey, fileIds);
-      },
-      saveFiles: async ({ addedFiles }) => {
-        const { roomId, roomKey } = this.portal;
-        if (!roomId || !roomKey) {
-          throw new AbortError();
-        }
+          for (const fileId of fileIds) {
+            try {
+              const response = await props.onImageDownload!(fileId);
+              if (response) {
+                loadedFiles.push({
+                  id: fileId,
+                  dataURL: response.dataURL,
+                  mimeType: "image/png", // Default to PNG, could be enhanced to detect actual type
+                  created: Date.now(),
+                });
+              } else {
+                erroredFiles.set(fileId, true);
+              }
+            } catch (error) {
+              console.error(`Failed to load image ${fileId}:`, error);
+              erroredFiles.set(fileId, true);
+            }
+          }
 
-        return saveFilesToFirebase({
-          prefix: `${FIREBASE_STORAGE_PREFIXES.collabFiles}/${roomId}`,
-          files: await encodeFilesForUpload({
-            files: addedFiles,
-            encryptionKey: roomKey,
-            maxBytes: FILE_UPLOAD_MAX_BYTES,
-          }),
-        });
-      },
-    });
+          return { loadedFiles, erroredFiles };
+        },
+        saveFiles: async ({ addedFiles }) => {
+          const savedFiles = new Map<FileId, true>();
+          const erroredFiles = new Map<FileId, true>();
+
+          for (const [fileId, fileData] of addedFiles) {
+            try {
+              // Convert dataURL back to File for upload
+              const response = await fetch(fileData.dataURL);
+              const blob = await response.blob();
+              const file = new File([blob], `${fileId}.png`, { type: fileData.mimeType });
+              
+              const uploadResult = await props.onImageUpload!(file, fileId);
+              if (uploadResult) {
+                savedFiles.set(fileId, true);
+              } else {
+                erroredFiles.set(fileId, true);
+              }
+            } catch (error) {
+              console.error(`Failed to save image ${fileId}:`, error);
+              erroredFiles.set(fileId, true);
+            }
+          }
+
+          return { savedFiles, erroredFiles };
+        },
+      });
+    } else {
+      // Fallback to Firebase
+      this.fileManager = new FileManager({
+        getFiles: async (fileIds) => {
+          const { roomId, roomKey } = this.portal;
+          if (!roomId || !roomKey) {
+            throw new AbortError();
+          }
+
+          return loadFilesFromFirebase(`files/rooms/${roomId}`, roomKey, fileIds);
+        },
+        saveFiles: async ({ addedFiles }) => {
+          const { roomId, roomKey } = this.portal;
+          if (!roomId || !roomKey) {
+            throw new AbortError();
+          }
+
+          return saveFilesToFirebase({
+            prefix: `${FIREBASE_STORAGE_PREFIXES.collabFiles}/${roomId}`,
+            files: await encodeFilesForUpload({
+              files: addedFiles,
+              encryptionKey: roomKey,
+              maxBytes: FILE_UPLOAD_MAX_BYTES,
+            }),
+          });
+        },
+      });
+    }
     this.excalidrawAPI = props.excalidrawAPI;
     this.activeIntervalId = null;
     this.idleTimeoutId = null;
