@@ -22,12 +22,12 @@ jobs:
         run: yarn install --frozen-lockfile
 
       - name: Build project
-        run: yarn build
+        run: CI=false yarn build
 
       - name: Build excalidraw package
         run: |
           cd src/packages/excalidraw
-          yarn build:umd
+          CI=false yarn build:umd
 
       - name: Create package tarball
         run: |
