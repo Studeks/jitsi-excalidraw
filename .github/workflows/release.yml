@@ -3,46 +3,46 @@ name: Create Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-        
+
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '16'
-          
+          node-version: "18"
+
       - name: Install dependencies
         run: yarn install --frozen-lockfile
-        
+
       - name: Build project
         run: yarn build
-        
+
       - name: Build excalidraw package
         run: |
           cd src/packages/excalidraw
           yarn build:umd
-          
+
       - name: Create package tarball
         run: |
           cd src/packages/excalidraw
           yarn pack
-          
+
       - name: Get version from tag
         id: get_version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-        
+
       - name: Rename tarball
         run: |
           cd src/packages/excalidraw
           mv jitsi-excalidraw-*.tgz jitsi-excalidraw-${{ steps.get_version.outputs.VERSION }}.tgz
-          
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
@@ -52,4 +52,4 @@ jobs:
           draft: false
           prerelease: false
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
