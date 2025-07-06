@@ -13,7 +13,6 @@ import {
   BinaryFiles,
   ExcalidrawInitialDataState,
   ExcalidrawAppProps,
-  BinaryFileData,
 } from "../../../types";
 import {
   debounce,
@@ -57,17 +56,12 @@ import "../../../excalidraw-app/index.scss";
 import { updateStaleImageStatuses } from "../../../excalidraw-app/data/FileManager";
 import { newElementWith } from "../../../element/mutateElement";
 import { isInitializedImageElement } from "../../../element/typeChecks";
-// Remove Firebase dependency - using custom S3 handlers
-// import { loadFilesFromFirebase } from "../../../excalidraw-app/data/firebase";
+import { loadFilesFromFirebase } from "../../../excalidraw-app/data/firebase";
 import { LocalData } from "../../../excalidraw-app/data/LocalData";
 import { isBrowserStorageStateNewer } from "../../../excalidraw-app/data/tabSync";
 import clsx from "clsx";
 import { Provider, useAtom } from "jotai";
-import {
-  jotaiScope,
-  jotaiStore,
-  useAtomWithInitialValue,
-} from "../../../jotai";
+import { jotaiStore, useAtomWithInitialValue } from "../../../jotai";
 import { reconcileElements } from "../../../excalidraw-app/collab/reconciliation";
 import {
   parseLibraryTokensFromUrl,
@@ -188,14 +182,6 @@ export const initializeScene = async (opts: {
 };
 
 const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
-  const {
-    collabServerUrl,
-    collabDetails,
-    excalidraw,
-    onImageUpload,
-    onImageDownload,
-    onImageDelete,
-  } = props;
   const [errorMessage, setErrorMessage] = useState("");
   let currentLangCode = languageDetector.detect() || defaultLang.code;
   if (Array.isArray(currentLangCode)) {
@@ -224,15 +210,11 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
   const [excalidrawAPI, excalidrawRefCallback] =
     useCallbackRefState<ExcalidrawImperativeAPI>();
 
-  const [isCollaborating, setIsCollaborating] = useAtom(
-    isCollaboratingAtom,
-    jotaiScope,
-  );
-  const [collabDialogShown, setCollabDialogShown] = useAtom(
-    collabDialogShownAtom,
-    jotaiScope,
-  );
-  const [collabAPI] = useAtom(collabAPIAtom, jotaiScope);
+  const [collabAPI] = useAtom(collabAPIAtom);
+  const [, setCollabDialogShown] = useAtom(collabDialogShownAtom);
+  const [isCollaborating] = useAtomWithInitialValue(isCollaboratingAtom, () => {
+    return isCollaborationLink(window.location.href);
+  });
 
   useHandleLibrary({
     excalidrawAPI,
@@ -244,7 +226,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
       return;
     }
 
-    const loadImages = async (
+    const loadImages = (
       data: ResolutionType<typeof initializeScene>,
       isInitialLoad = false,
     ) => {
@@ -281,66 +263,48 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
           }, [] as FileId[]) || [];
 
         if (data.isExternalScene) {
-          // Custom external scene - skip for now as it requires collaborative server setup
-          console.warn(
-            "External scene image loading not implemented for custom S3",
-          );
-        } else if (isInitialLoad) {
-          if (fileIds.length && onImageDownload) {
-            // Load files from custom S3 handlers
-            const loadedFiles: BinaryFileData[] = [];
-            const erroredFiles = new Map<FileId, true>();
-
-            // Load files sequentially to avoid issues with async/await in build
-            const loadFilePromises = fileIds.map(async (fileId) => {
-              try {
-                const response = await onImageDownload(fileId);
-                if (response) {
-                  return {
-                    id: fileId,
-                    dataURL: response.dataURL,
-                    mimeType: "image/png", // Default to PNG, could be enhanced to detect actual type
-                    created: Date.now(),
-                  };
-                } else {
-                  erroredFiles.set(fileId, true);
-                  return null;
-                }
-              } catch (error) {
-                console.error(`Failed to load image ${fileId}:`, error);
-                erroredFiles.set(fileId, true);
-                return null;
-              }
-            });
-
-            const results = await Promise.all(loadFilePromises);
-            loadedFiles.push(
-              ...results.filter(
-                (file): file is BinaryFileData => file !== null,
-              ),
-            );
-
-            if (loadedFiles.length) {
-              excalidrawAPI.addFiles(loadedFiles);
+          loadFilesFromFirebase(
+            `${FIREBASE_STORAGE_PREFIXES.shareLinkFiles}/${data.id}`,
+            data.key,
+            fileIds,
+          ).then((response) => {
+            if (!response) {
+              return;
             }
-
-            if (erroredFiles.size || loadedFiles.length) {
+            const { loadedFiles, erroredFiles } = response;
+            excalidrawAPI.addFiles(loadedFiles);
+            updateStaleImageStatuses({
+              excalidrawAPI,
+              erroredFiles,
+              elements: excalidrawAPI.getSceneElementsIncludingDeleted(),
+            });
+          });
+        } else if (isInitialLoad) {
+          if (fileIds.length) {
+            LocalData.fileStorage.getFiles(fileIds).then((response) => {
+              if (!response) {
+                return;
+              }
+              const { loadedFiles, erroredFiles } = response;
+              if (loadedFiles.length) {
+                excalidrawAPI.addFiles(loadedFiles);
+              }
               updateStaleImageStatuses({
                 excalidrawAPI,
                 erroredFiles,
                 elements: excalidrawAPI.getSceneElementsIncludingDeleted(),
               });
-            }
+            });
           }
           // on fresh load, clear unused files from IDB (from previous
           // session)
-          // LocalData.fileStorage.clearObsoleteFiles({ currentFileIds: fileIds });
+          LocalData.fileStorage.clearObsoleteFiles({ currentFileIds: fileIds });
         }
       }
     };
 
     initializeScene({ collabAPI }).then(async (data) => {
-      await loadImages(data, /* isInitialLoad */ true);
+      loadImages(data, /* isInitialLoad */ true);
 
       initialStatePromiseRef.current.promise.resolve({
         ...data.scene,
@@ -371,8 +335,8 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
         }
         excalidrawAPI.updateScene({ appState: { isLoading: true } });
 
-        initializeScene({ collabAPI }).then(async (data) => {
-          await loadImages(data);
+        initializeScene({ collabAPI }).then((data) => {
+          loadImages(data);
           if (data.scene) {
             excalidrawAPI.updateScene({
               ...data.scene,
@@ -427,55 +391,20 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
               return acc;
             }, [] as FileId[]) || [];
           if (fileIds.length) {
-            // Load files from custom S3 handlers
-            if (onImageDownload) {
-              const loadCustomImages = async () => {
-                const loadedFiles: BinaryFileData[] = [];
-                const erroredFiles = new Map<FileId, true>();
-
-                // Load files with Promise.all to avoid build issues
-                const loadFilePromises = fileIds.map(async (fileId) => {
-                  try {
-                    const response = await onImageDownload(fileId);
-                    if (response) {
-                      return {
-                        id: fileId,
-                        dataURL: response.dataURL,
-                        mimeType: "image/png", // Default to PNG, could be enhanced to detect actual type
-                        created: Date.now(),
-                      };
-                    } else {
-                      erroredFiles.set(fileId, true);
-                      return null;
-                    }
-                  } catch (error) {
-                    console.error(`Failed to load image ${fileId}:`, error);
-                    erroredFiles.set(fileId, true);
-                    return null;
-                  }
-                });
-
-                const results = await Promise.all(loadFilePromises);
-                loadedFiles.push(
-                  ...results.filter(
-                    (file): file is BinaryFileData => file !== null,
-                  ),
-                );
-
-                if (loadedFiles.length) {
-                  excalidrawAPI.addFiles(loadedFiles);
-                }
-
-                if (erroredFiles.size || loadedFiles.length) {
-                  updateStaleImageStatuses({
-                    excalidrawAPI,
-                    erroredFiles,
-                    elements: excalidrawAPI.getSceneElementsIncludingDeleted(),
-                  });
-                }
-              };
-              loadCustomImages();
-            }
+            LocalData.fileStorage.getFiles(fileIds).then((response) => {
+              if (!response) {
+                return;
+              }
+              const { loadedFiles, erroredFiles } = response;
+              if (loadedFiles.length) {
+                excalidrawAPI.addFiles(loadedFiles);
+              }
+              updateStaleImageStatuses({
+                excalidrawAPI,
+                erroredFiles,
+                elements: excalidrawAPI.getSceneElementsIncludingDeleted(),
+              });
+            });
           }
         }
       }
@@ -626,9 +555,6 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
           collabServerUrl={props.collabServerUrl}
           collabDetails={props.collabDetails}
           excalidrawAPI={excalidrawAPI}
-          onImageUpload={onImageUpload}
-          onImageDownload={onImageDownload}
-          onImageDelete={onImageDelete}
         />
       )}
       {errorMessage && (

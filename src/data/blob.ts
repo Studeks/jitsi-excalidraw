@@ -117,10 +117,7 @@ export const isImageFileHandle = (handle: FileSystemHandle | null) => {
 export const isSupportedImageFile = (
   blob: Blob | null | undefined,
 ): blob is Blob & { type: typeof ALLOWED_IMAGE_MIME_TYPES[number] } => {
-  return (
-    !!blob &&
-    ALLOWED_IMAGE_MIME_TYPES.includes(blob.type as any)
-  );
+  return !!blob && ALLOWED_IMAGE_MIME_TYPES.includes(blob.type as any);
 };
 
 export const loadSceneOrLibraryFromBlob = async (

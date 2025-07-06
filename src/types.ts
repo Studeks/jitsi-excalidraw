@@ -322,10 +322,6 @@ export interface CollabProps {
   excalidrawAPI: ExcalidrawImperativeAPI;
   modalIsShown?: boolean;
   useTestEnv?: boolean;
-  // Custom image upload/download callbacks for S3 integration
-  onImageUpload?: (file: File, fileId: FileId) => Promise<{ url: string } | null>;
-  onImageDownload?: (fileId: FileId) => Promise<{ dataURL: DataURL } | null>;
-  onImageDelete?: (fileId: FileId) => Promise<boolean>;
 }
 
 export interface ExcalidrawAppProps {
@@ -334,10 +330,6 @@ export interface ExcalidrawAppProps {
   excalidraw: ExcalidrawProps;
   getExcalidrawAPI?: Function;
   getCollabAPI?: Function;
-  // Custom image upload/download callbacks for S3 integration
-  onImageUpload?: (file: File, fileId: FileId) => Promise<{ url: string } | null>;
-  onImageDownload?: (fileId: FileId) => Promise<{ dataURL: DataURL } | null>;
-  onImageDelete?: (fileId: FileId) => Promise<boolean>;
 }
 
 export type SceneData = {
