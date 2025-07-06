@@ -28,7 +28,10 @@ jobs:
         run: |
           cd src/packages/excalidraw
           yarn install
-          CI=false yarn build:umd
+          # Build without type generation to avoid minimatch type errors
+          rm -rf dist
+          CI=false cross-env NODE_ENV=production webpack --config webpack.prod.config.js
+          CI=false cross-env NODE_ENV=development webpack --config webpack.dev.config.js
 
       - name: Create package tarball
         run: |
