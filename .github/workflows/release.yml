@@ -28,7 +28,7 @@ jobs:
         run: |
           cd src/packages/excalidraw
           yarn install
-          # Build with type generation (now that we have @types/minimatch)
+          # Build with types (fixed minimatch issue)
           CI=false yarn build:umd:with-types
 
       - name: Create package structure and tarball

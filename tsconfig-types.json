@@ -13,6 +13,7 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
-    "strict": true
+    "strict": true,
+    "typeRoots": ["./node_modules/@types", "./src/packages/excalidraw/node_modules/@types"]
   }
 }
