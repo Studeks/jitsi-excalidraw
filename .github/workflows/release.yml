@@ -31,8 +31,8 @@ jobs:
         run: |
           cd src/packages/excalidraw
           yarn install
-          # Build without type generation to avoid minimatch type errors
-          CI=false yarn build:umd:no-types
+          # Build with type generation (now that we have @types/minimatch)
+          CI=false yarn build:umd:with-types
 
       - name: Create package tarball
         run: |
