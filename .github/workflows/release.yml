@@ -24,9 +24,6 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
-      - name: Build project
-        run: CI=false yarn build
-
       - name: Build excalidraw package
         run: |
           cd src/packages/excalidraw
