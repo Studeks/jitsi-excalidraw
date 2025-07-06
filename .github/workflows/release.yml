@@ -24,9 +24,10 @@ jobs:
       - name: Build project
         run: CI=false yarn build
 
-      - name: Build excalidraw package
+            - name: Build excalidraw package
         run: |
           cd src/packages/excalidraw
+          yarn install --frozen-lockfile
           CI=false yarn build:umd
 
       - name: Create package tarball
