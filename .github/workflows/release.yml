@@ -53,8 +53,7 @@ jobs:
           cd ../../../temp_package
           tar -czf ../jitsi-excalidraw-${VERSION}.tgz package/
 
-          # Move tarball to workspace root
-          mv ../jitsi-excalidraw-${VERSION}.tgz ../
+          # Tarball is already in workspace root, no need to move
 
       - name: Get version from tag
         id: get_version
