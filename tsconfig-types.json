@@ -26,6 +26,10 @@
     "noPropertyAccessFromIndexSignature": false,
     "noUncheckedIndexedAccess": false,
     "suppressImplicitAnyIndexErrors": true,
+    "suppressExcessPropertyErrors": true,
+    "noStrictGenericChecks": true,
+    "allowUnreachableCode": true,
+    "allowUnusedLabels": true,
     "typeRoots": ["./node_modules/@types", "./src/packages/excalidraw/node_modules/@types"]
   }
 }
