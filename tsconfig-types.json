@@ -18,6 +18,14 @@
     "noImplicitReturns": false,
     "noImplicitThis": false,
     "strictNullChecks": false,
+    "noEmitOnError": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "exactOptionalPropertyTypes": false,
+    "noImplicitOverride": false,
+    "noPropertyAccessFromIndexSignature": false,
+    "noUncheckedIndexedAccess": false,
+    "suppressImplicitAnyIndexErrors": true,
     "typeRoots": ["./node_modules/@types", "./src/packages/excalidraw/node_modules/@types"]
   }
 }

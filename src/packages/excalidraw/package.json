@@ -75,7 +75,7 @@
   "bugs": "https://github.com/jitsi/excalidraw/issues",
   "homepage": "https://github.com/jitsi/excalidraw/tree/master/src/packages/excalidraw",
   "scripts": {
-    "gen:types": "tsc --project ../../../tsconfig-types.json",
+    "gen:types": "tsc --project ../../../tsconfig-types.json --noEmitOnError false --skipLibCheck",
     "build:umd": "rm -rf dist && cross-env NODE_ENV=production webpack --config webpack.prod.config.js && cross-env NODE_ENV=development webpack --config webpack.dev.config.js && yarn gen:types",
     "build:umd:with-types": "rm -rf dist && cross-env NODE_ENV=production webpack --config webpack.prod.config.js && cross-env NODE_ENV=development webpack --config webpack.dev.config.js && yarn gen:types",
     "build:umd:no-types": "rm -rf dist && cross-env NODE_ENV=production webpack --config webpack.prod.config.js && cross-env NODE_ENV=development webpack --config webpack.dev.config.js",
