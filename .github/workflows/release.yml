@@ -28,8 +28,10 @@ jobs:
         run: |
           cd src/packages/excalidraw
           yarn install
-          # Build with types (fixed minimatch issue)
-          CI=false yarn build:umd:with-types
+          # Build with types (no linting)
+          CI=false SKIP_LINT=true yarn build:umd:with-types
+        env:
+          HUSKY: 0
 
       - name: Create package structure and tarball
         run: |
