@@ -322,6 +322,10 @@ export interface CollabProps {
   excalidrawAPI: ExcalidrawImperativeAPI;
   modalIsShown?: boolean;
   useTestEnv?: boolean;
+  onFileFetch?: (fileIds: string[]) => Promise<{
+    loadedFiles: BinaryFileData[];
+    erroredFiles: Map<string, true>;
+  }>;
 }
 
 export interface ExcalidrawAppProps {
@@ -333,6 +337,11 @@ export interface ExcalidrawAppProps {
   // Custom file upload support
   onFileUpload?: (file: File) => Promise<string>;
   onFilesChange?: (files: BinaryFiles) => void;
+  // Custom file fetch support for collaboration
+  onFileFetch?: (fileIds: string[]) => Promise<{
+    loadedFiles: BinaryFileData[];
+    erroredFiles: Map<string, true>;
+  }>;
 }
 
 export type SceneData = {

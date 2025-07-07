@@ -236,6 +236,25 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
   const [excalidrawAPI, excalidrawRefCallback] =
     useCallbackRefState<ExcalidrawImperativeAPI>();
 
+  // Custom image fetching for collaboration
+  const handleFileFetch = useCallback(
+    async (fileIds: string[]) => {
+      if (props.onFileFetch) {
+        try {
+          return await props.onFileFetch(fileIds);
+        } catch (error) {
+          console.error("Custom file fetch failed:", error);
+          return {
+            loadedFiles: [],
+            erroredFiles: new Map(fileIds.map((id) => [id, true as const])),
+          };
+        }
+      }
+      return null;
+    },
+    [props.onFileFetch],
+  );
+
   const handlePaste = useCallback(
     async (data: any, event: ClipboardEvent | null): Promise<boolean> => {
       // If user provided custom paste handler, use it first
@@ -253,11 +272,9 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
         );
         if (imageFiles.length > 0) {
           try {
-            // Upload files and add them to Excalidraw
             for (const file of imageFiles) {
               const fileId = await props.onFileUpload(file);
 
-              // Add file to Excalidraw with remote URL as ID
               if (excalidrawAPI) {
                 const reader = new FileReader();
                 reader.onload = () => {
@@ -274,7 +291,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
                 reader.readAsDataURL(file);
               }
             }
-            return true; // We handled the paste
+            return true;
           } catch (error) {
             console.error("Failed to upload pasted images:", error);
             return false;
@@ -282,7 +299,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
         }
       }
 
-      return false; // Let default handling take over
+      return false;
     },
     [props.excalidraw.onPaste, props.onFileUpload],
   );
@@ -312,23 +329,51 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
       }
       if (collabAPI.isCollaborating()) {
         if (data.scene.elements) {
-          collabAPI
-            .fetchImageFilesFromFirebase({
-              elements: data.scene.elements,
-            })
-            .then((response) => {
-              if (!response) {
-                return;
-              }
+          // Try custom file fetch first if available
+          if (props.onFileFetch) {
+            const fileIds = data.scene.elements
+              .filter((element) => {
+                return (
+                  isInitializedImageElement(element) &&
+                  !element.isDeleted &&
+                  element.status === "saved"
+                );
+              })
+              .map((element) => (element as any).fileId);
 
-              const { loadedFiles, erroredFiles } = response;
-              excalidrawAPI.addFiles(loadedFiles);
-              updateStaleImageStatuses({
-                excalidrawAPI,
-                erroredFiles,
-                elements: excalidrawAPI.getSceneElementsIncludingDeleted(),
+            if (fileIds.length > 0) {
+              handleFileFetch(fileIds).then((response) => {
+                if (response) {
+                  const { loadedFiles, erroredFiles } = response;
+                  excalidrawAPI.addFiles(loadedFiles);
+                  updateStaleImageStatuses({
+                    excalidrawAPI,
+                    erroredFiles: erroredFiles as any,
+                    elements: excalidrawAPI.getSceneElementsIncludingDeleted(),
+                  });
+                }
               });
-            });
+            }
+          } else {
+            // Fall back to Firebase if no custom fetch
+            collabAPI
+              .fetchImageFilesFromFirebase({
+                elements: data.scene.elements,
+              })
+              .then((response) => {
+                if (!response) {
+                  return;
+                }
+
+                const { loadedFiles, erroredFiles } = response;
+                excalidrawAPI.addFiles(loadedFiles);
+                updateStaleImageStatuses({
+                  excalidrawAPI,
+                  erroredFiles,
+                  elements: excalidrawAPI.getSceneElementsIncludingDeleted(),
+                });
+              });
+          }
         }
       } else {
         const fileIds =
@@ -639,6 +684,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
           collabServerUrl={props.collabServerUrl}
           collabDetails={props.collabDetails}
           excalidrawAPI={excalidrawAPI}
+          onFileFetch={props.onFileFetch}
         />
       )}
       {errorMessage && (

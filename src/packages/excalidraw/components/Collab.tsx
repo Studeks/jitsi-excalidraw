@@ -623,6 +623,39 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   };
 
   private loadImageFiles = throttle(async () => {
+    // Try custom file fetch first if available
+    if (this.props.onFileFetch) {
+      const elements = this.excalidrawAPI.getSceneElementsIncludingDeleted();
+      const fileIds = elements
+        .filter((element) => {
+          return (
+            isInitializedImageElement(element) &&
+            !this.fileManager.isFileHandled(element.fileId) &&
+            !element.isDeleted &&
+            element.status === "saved"
+          );
+        })
+        .map((element) => (element as any).fileId);
+
+      if (fileIds.length > 0) {
+        try {
+          const response = await this.props.onFileFetch(fileIds);
+          const { loadedFiles, erroredFiles } = response;
+          this.excalidrawAPI.addFiles(loadedFiles);
+
+          updateStaleImageStatuses({
+            excalidrawAPI: this.excalidrawAPI,
+            erroredFiles: erroredFiles as any,
+            elements: this.excalidrawAPI.getSceneElementsIncludingDeleted(),
+          });
+        } catch (error) {
+          console.error("Custom file fetch failed:", error);
+        }
+      }
+      return;
+    }
+
+    // Fall back to Firebase if no custom fetch
     const response = await this.fetchImageFilesFromFirebase({
       elements: this.excalidrawAPI.getSceneElementsIncludingDeleted(),
     });
