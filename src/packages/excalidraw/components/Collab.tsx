@@ -110,6 +110,11 @@ class Collab extends PureComponent<CollabProps, CollabState> {
 
   constructor(props: CollabProps) {
     super(props);
+    console.log("🚀 Collab component initialized", {
+      hasOnFileFetch: !!props.onFileFetch,
+      collabServerUrl: props.collabServerUrl,
+    });
+
     this.state = {
       errorMessage: "",
       username: importUsernameFromLocalStorage() || "",
@@ -199,6 +204,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   isCollaborating = () => jotaiStore.get(isCollaboratingAtom)!;
 
   private setIsCollaborating = (isCollaborating: boolean) => {
+    console.log("🔄 Collaboration status changed:", isCollaborating);
     jotaiStore.set(isCollaboratingAtom, isCollaborating);
   };
 
@@ -388,6 +394,10 @@ class Collab extends PureComponent<CollabProps, CollabState> {
 
     const scenePromise = resolvablePromise<ImportedDataState | null>();
 
+    console.log("🤝 Starting collaboration", {
+      roomId,
+      existingRoomLinkData: !!existingRoomLinkData,
+    });
     this.setIsCollaborating(true);
     LocalData.pauseSave("collaboration");
 
@@ -623,23 +633,47 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   };
 
   private loadImageFiles = throttle(async () => {
+    console.log(
+      "🔍 loadImageFiles called, onFileFetch available:",
+      !!this.props.onFileFetch,
+    );
+
     // Try custom file fetch first if available
     if (this.props.onFileFetch) {
+      console.log("🚀 Using custom onFileFetch");
+
       const elements = this.excalidrawAPI.getSceneElementsIncludingDeleted();
-      const fileIds = elements
+      console.log("📊 Total elements:", elements.length);
+
+      const unfetchedImages = elements
         .filter((element) => {
-          return (
-            isInitializedImageElement(element) &&
-            !this.fileManager.isFileHandled(element.fileId) &&
-            !element.isDeleted &&
-            element.status === "saved"
+          const isImage = isInitializedImageElement(element);
+          const notHandled = !this.fileManager.isFileHandled(
+            (element as any).fileId,
           );
+          const notDeleted = !element.isDeleted;
+          const saved = (element as any).status === "saved";
+
+          console.log("🔍 Element filter check:", {
+            fileId: (element as any).fileId,
+            isImage,
+            notHandled,
+            notDeleted,
+            saved,
+          });
+
+          return isImage && notHandled && notDeleted && saved;
         })
         .map((element) => (element as any).fileId);
 
-      if (fileIds.length > 0) {
+      console.log("📥 Unfetched image fileIds:", unfetchedImages);
+
+      if (unfetchedImages.length > 0) {
         try {
-          const response = await this.props.onFileFetch(fileIds);
+          console.log("🚀 Calling onFileFetch with fileIds:", unfetchedImages);
+          const response = await this.props.onFileFetch(unfetchedImages);
+          console.log("✅ onFileFetch response:", response);
+
           const { loadedFiles, erroredFiles } = response;
           this.excalidrawAPI.addFiles(loadedFiles);
 
@@ -649,21 +683,25 @@ class Collab extends PureComponent<CollabProps, CollabState> {
             elements: this.excalidrawAPI.getSceneElementsIncludingDeleted(),
           });
         } catch (error) {
-          console.error("Custom file fetch failed:", error);
+          console.error("❌ Custom file fetch failed:", error);
         }
+      } else {
+        console.log("⏭️ No unfetched images to load");
       }
       return;
     }
 
-    // Fall back to Firebase if no custom fetch
+    console.log("🔄 Falling back to Firebase fetchImageFilesFromFirebase");
     const response = await this.fetchImageFilesFromFirebase({
       elements: this.excalidrawAPI.getSceneElementsIncludingDeleted(),
     });
 
     if (!response) {
+      console.log("❌ No response from Firebase");
       return;
     }
 
+    console.log("✅ Firebase response:", response);
     const { loadedFiles, erroredFiles } = response;
     this.excalidrawAPI.addFiles(loadedFiles);
 
@@ -678,6 +716,13 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     elements: ReconciledElements,
     { init = false }: { init?: boolean } = {},
   ) => {
+    console.log("🌐 handleRemoteSceneUpdate called", {
+      elementsCount: elements.length,
+      init,
+      imageElements: elements.filter((el) => isInitializedImageElement(el))
+        .length,
+    });
+
     this.excalidrawAPI.updateScene({
       elements,
       commitToHistory: !!init,
@@ -689,6 +734,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     // right now we think this is the right tradeoff.
     this.excalidrawAPI.history.clear();
 
+    console.log("🔄 About to call loadImageFiles");
     this.loadImageFiles();
   };
 
