@@ -436,24 +436,29 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
               "🔄 Custom onFileFetch available, filtering elements...",
             );
 
+            // Get current files to avoid re-fetching
+            const currentFiles = excalidrawAPI.getFiles();
+
             const fileIds = data.scene.elements
               .filter((element) => {
                 const isImage = isInitializedImageElement(element);
                 const notDeleted = !element.isDeleted;
-                const hasStatus = isImage
-                  ? (element as any).status === "saved"
-                  : false;
+                const fileId = (element as any).fileId;
+                const notAlreadyLoaded = !currentFiles[fileId];
 
                 console.log("🔍 Element filter check:", {
                   elementId: element.id,
                   type: element.type,
                   isImage,
                   notDeleted,
-                  hasStatus,
-                  fileId: isImage ? (element as any).fileId : null,
+                  fileId,
+                  notAlreadyLoaded,
+                  elementStatus: (element as any).status,
+                  currentFilesKeys: Object.keys(currentFiles),
                 });
 
-                return isImage && notDeleted && hasStatus;
+                // More aggressive filtering - just check if it's an image, not deleted, and not already loaded
+                return isImage && notDeleted && notAlreadyLoaded;
               })
               .map((element) => (element as any).fileId);
 

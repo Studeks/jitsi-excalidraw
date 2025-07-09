@@ -103,6 +103,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   excalidrawAPI: CollabProps["excalidrawAPI"];
   activeIntervalId: number | null;
   idleTimeoutId: number | null;
+  periodicImageCheck: number | null = null;
 
   private socketInitializationTimer?: number;
   private lastBroadcastedOrReceivedSceneVersion: number = -1;
@@ -171,6 +172,38 @@ class Collab extends PureComponent<CollabProps, CollabState> {
 
     jotaiStore.set(collabAPIAtom, collabAPI);
 
+    // Periodic image loading check for collaboration
+    if (this.props.onFileFetch) {
+      this.periodicImageCheck = window.setInterval(() => {
+        if (this.isCollaborating()) {
+          const currentFiles = this.excalidrawAPI.getFiles();
+          const elements =
+            this.excalidrawAPI.getSceneElementsIncludingDeleted();
+          const imageElements = elements.filter(
+            (el) => isInitializedImageElement(el) && !el.isDeleted,
+          );
+          const missingFileIds = imageElements
+            .map((el) => (el as any).fileId)
+            .filter((fileId) => !currentFiles[fileId]);
+
+          if (missingFileIds.length > 0) {
+            console.log(
+              "🔄 Periodic check found missing images:",
+              missingFileIds,
+            );
+            this.props.onFileFetch!(missingFileIds)
+              .then((response) => {
+                console.log("✅ Periodic load response:", response);
+                this.excalidrawAPI.addFiles(response.loadedFiles);
+              })
+              .catch((error) => {
+                console.error("❌ Periodic load failed:", error);
+              });
+          }
+        }
+      }, 3000); // Check every 3 seconds
+    }
+
     if (this.props.useTestEnv) {
       window.collab = window.collab || ({} as Window["collab"]);
       Object.defineProperties(window, {
@@ -198,6 +231,10 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     if (this.idleTimeoutId) {
       window.clearTimeout(this.idleTimeoutId);
       this.idleTimeoutId = null;
+    }
+    if (this.periodicImageCheck) {
+      window.clearInterval(this.periodicImageCheck);
+      this.periodicImageCheck = null;
     }
   }
 
@@ -645,24 +682,28 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       const elements = this.excalidrawAPI.getSceneElementsIncludingDeleted();
       console.log("📊 Total elements:", elements.length);
 
+      // Get current files to avoid re-fetching already loaded files
+      const currentFiles = this.excalidrawAPI.getFiles();
+
       const unfetchedImages = elements
         .filter((element) => {
           const isImage = isInitializedImageElement(element);
-          const notHandled = !this.fileManager.isFileHandled(
-            (element as any).fileId,
-          );
           const notDeleted = !element.isDeleted;
-          const saved = (element as any).status === "saved";
+          const fileId = (element as any).fileId;
+          // Check if file is already loaded in excalidraw
+          const notAlreadyLoaded = !currentFiles[fileId];
 
           console.log("🔍 Element filter check:", {
-            fileId: (element as any).fileId,
+            fileId,
             isImage,
-            notHandled,
             notDeleted,
-            saved,
+            notAlreadyLoaded,
+            elementStatus: (element as any).status,
+            currentFilesKeys: Object.keys(currentFiles),
           });
 
-          return isImage && notHandled && notDeleted && saved;
+          // Much more aggressive filtering - only check if it's an image, not deleted, and not already loaded
+          return isImage && notDeleted && notAlreadyLoaded;
         })
         .map((element) => (element as any).fileId);
 
@@ -675,6 +716,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
           console.log("✅ onFileFetch response:", response);
 
           const { loadedFiles, erroredFiles } = response;
+
           this.excalidrawAPI.addFiles(loadedFiles);
 
           updateStaleImageStatuses({
@@ -736,6 +778,38 @@ class Collab extends PureComponent<CollabProps, CollabState> {
 
     console.log("🔄 About to call loadImageFiles");
     this.loadImageFiles();
+
+    // Additional aggressive image loading for collaboration
+    if (this.props.onFileFetch) {
+      console.log("🚀 Additional aggressive image loading triggered");
+      setTimeout(() => {
+        const currentFiles = this.excalidrawAPI.getFiles();
+        const imageElements = elements.filter(
+          (el) => isInitializedImageElement(el) && !el.isDeleted,
+        );
+        const missingFileIds = imageElements
+          .map((el) => (el as any).fileId)
+          .filter((fileId) => !currentFiles[fileId]);
+
+        console.log("🔍 Missing files check:", {
+          totalImages: imageElements.length,
+          currentFilesCount: Object.keys(currentFiles).length,
+          missingFileIds,
+        });
+
+        if (missingFileIds.length > 0) {
+          console.log("🚀 Force loading missing images:", missingFileIds);
+          this.props.onFileFetch!(missingFileIds)
+            .then((response) => {
+              console.log("✅ Force load response:", response);
+              this.excalidrawAPI.addFiles(response.loadedFiles);
+            })
+            .catch((error) => {
+              console.error("❌ Force load failed:", error);
+            });
+        }
+      }, 100); // Small delay to ensure scene is updated
+    }
   };
 
   private onPointerMove = () => {
