@@ -172,7 +172,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
 
     jotaiStore.set(collabAPIAtom, collabAPI);
 
-    // Periodic image loading check for collaboration
+    // NUCLEAR PERIODIC image loading check for collaboration
     if (this.props.onFileFetch) {
       this.periodicImageCheck = window.setInterval(() => {
         if (this.isCollaborating()) {
@@ -182,26 +182,64 @@ class Collab extends PureComponent<CollabProps, CollabState> {
           const imageElements = elements.filter(
             (el) => isInitializedImageElement(el) && !el.isDeleted,
           );
-          const missingFileIds = imageElements
-            .map((el) => (el as any).fileId)
-            .filter((fileId) => !currentFiles[fileId]);
 
-          if (missingFileIds.length > 0) {
+          // Check for images that are missing OR have wrong status
+          const problematicFileIds = imageElements
+            .filter((el) => {
+              const fileId = (el as any).fileId;
+              const hasFile = !!currentFiles[fileId];
+              const hasWrongStatus = (el as any).status !== "saved";
+              return !hasFile || hasWrongStatus;
+            })
+            .map((el) => (el as any).fileId);
+
+          if (problematicFileIds.length > 0) {
             console.log(
-              "🔄 Periodic check found missing images:",
-              missingFileIds,
+              "🔄 NUCLEAR PERIODIC: Found problematic images:",
+              problematicFileIds,
             );
-            this.props.onFileFetch!(missingFileIds)
+            this.props.onFileFetch!(problematicFileIds)
               .then((response) => {
-                console.log("✅ Periodic load response:", response);
+                console.log("✅ NUCLEAR PERIODIC: Load response:", response);
                 this.excalidrawAPI.addFiles(response.loadedFiles);
+
+                // FORCE UPDATE: Update all image elements to have "saved" status
+                const updatedElements = this.excalidrawAPI
+                  .getSceneElementsIncludingDeleted()
+                  .map((element) => {
+                    if (
+                      isInitializedImageElement(element) &&
+                      !element.isDeleted
+                    ) {
+                      const fileId = (element as any).fileId;
+                      const hasLoadedFile = response.loadedFiles.some(
+                        (file) => file.id === fileId,
+                      );
+
+                      if (hasLoadedFile) {
+                        console.log(
+                          "🔄 NUCLEAR PERIODIC: Updating element status to saved:",
+                          element.id,
+                          fileId,
+                        );
+                        return newElementWith(element, { status: "saved" });
+                      }
+                    }
+                    return element;
+                  });
+
+                // Force update the scene with corrected statuses
+                this.excalidrawAPI.updateScene({
+                  elements: updatedElements,
+                  commitToHistory: false,
+                });
               })
               .catch((error) => {
-                console.error("❌ Periodic load failed:", error);
+                console.error("❌ NUCLEAR PERIODIC: Load failed:", error);
               });
           }
         }
-      }, 3000); // Check every 3 seconds
+      }, 2000); // Check every 2 seconds
     }
 
     if (this.props.useTestEnv) {
@@ -719,6 +757,34 @@ class Collab extends PureComponent<CollabProps, CollabState> {
 
           this.excalidrawAPI.addFiles(loadedFiles);
 
+          // FORCE UPDATE: Update all image elements to have "saved" status after loading
+          const updatedElements = this.excalidrawAPI
+            .getSceneElementsIncludingDeleted()
+            .map((element) => {
+              if (isInitializedImageElement(element) && !element.isDeleted) {
+                const fileId = (element as any).fileId;
+                const hasLoadedFile = loadedFiles.some(
+                  (file) => file.id === fileId,
+                );
+
+                if (hasLoadedFile) {
+                  console.log(
+                    "🔄 loadImageFiles: Updating element status to saved:",
+                    element.id,
+                    fileId,
+                  );
+                  return newElementWith(element, { status: "saved" });
+                }
+              }
+              return element;
+            });
+
+          // Force update the scene with corrected statuses
+          this.excalidrawAPI.updateScene({
+            elements: updatedElements,
+            commitToHistory: false,
+          });
+
           updateStaleImageStatuses({
             excalidrawAPI: this.excalidrawAPI,
             erroredFiles: erroredFiles as any,
@@ -779,36 +845,82 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     console.log("🔄 About to call loadImageFiles");
     this.loadImageFiles();
 
-    // Additional aggressive image loading for collaboration
+    // NUCLEAR OPTION: Force load ALL images immediately and update their status
     if (this.props.onFileFetch) {
-      console.log("🚀 Additional aggressive image loading triggered");
-      setTimeout(() => {
+      console.log("🚀 NUCLEAR IMAGE LOADING ACTIVATED");
+
+      const forceLoadImages = async () => {
         const currentFiles = this.excalidrawAPI.getFiles();
         const imageElements = elements.filter(
           (el) => isInitializedImageElement(el) && !el.isDeleted,
         );
-        const missingFileIds = imageElements
-          .map((el) => (el as any).fileId)
-          .filter((fileId) => !currentFiles[fileId]);
 
-        console.log("🔍 Missing files check:", {
+        console.log("🔍 NUCLEAR: Image analysis:", {
           totalImages: imageElements.length,
           currentFilesCount: Object.keys(currentFiles).length,
-          missingFileIds,
+          imageElementDetails: imageElements.map((el) => ({
+            id: el.id,
+            fileId: (el as any).fileId,
+            status: (el as any).status,
+            type: el.type,
+          })),
         });
 
-        if (missingFileIds.length > 0) {
-          console.log("🚀 Force loading missing images:", missingFileIds);
-          this.props.onFileFetch!(missingFileIds)
-            .then((response) => {
-              console.log("✅ Force load response:", response);
-              this.excalidrawAPI.addFiles(response.loadedFiles);
-            })
-            .catch((error) => {
-              console.error("❌ Force load failed:", error);
+        // Get ALL fileIds from image elements, regardless of current status
+        const allFileIds = imageElements.map((el) => (el as any).fileId);
+
+        if (allFileIds.length > 0) {
+          console.log("🚀 NUCLEAR: Force loading ALL images:", allFileIds);
+
+          try {
+            const response = await this.props.onFileFetch!(allFileIds);
+            console.log("✅ NUCLEAR: Load response:", response);
+
+            // Add files to excalidraw
+            this.excalidrawAPI.addFiles(response.loadedFiles);
+
+            // FORCE UPDATE: Update all image elements to have "saved" status
+            const updatedElements = this.excalidrawAPI
+              .getSceneElementsIncludingDeleted()
+              .map((element) => {
+                if (isInitializedImageElement(element) && !element.isDeleted) {
+                  const fileId = (element as any).fileId;
+                  const hasLoadedFile = response.loadedFiles.some(
+                    (file) => file.id === fileId,
+                  );
+
+                  if (hasLoadedFile) {
+                    console.log(
+                      "🔄 NUCLEAR: Updating element status to saved:",
+                      element.id,
+                      fileId,
+                    );
+                    return newElementWith(element, { status: "saved" });
+                  }
+                }
+                return element;
+              });
+
+            // Force update the scene with corrected statuses
+            this.excalidrawAPI.updateScene({
+              elements: updatedElements,
+              commitToHistory: false,
             });
+
+            console.log("✅ NUCLEAR: Scene updated with saved statuses");
+          } catch (error) {
+            console.error("❌ NUCLEAR: Force load failed:", error);
+          }
         }
-      }, 100); // Small delay to ensure scene is updated
+      };
+
+      // Run immediately
+      forceLoadImages();
+
+      // Run again after a delay
+      setTimeout(forceLoadImages, 200);
+      setTimeout(forceLoadImages, 500);
+      setTimeout(forceLoadImages, 1000);
     }
   };
 
