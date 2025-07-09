@@ -278,33 +278,27 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
     useCallbackRefState<ExcalidrawImperativeAPI>();
 
   // Custom image fetching for collaboration
-  const handleFileFetch = useCallback(
-    async (fileIds: string[]) => {
-      console.log("🔄 handleFileFetch called with fileIds:", fileIds);
-      console.log("🔄 props.onFileFetch available:", !!props.onFileFetch);
+  const handleFileFetch = async (fileIds: string[]) => {
+    console.log("🔄 handleFileFetch called with fileIds:", fileIds);
+    console.log("🔄 props.onFileFetch available:", !!props.onFileFetch);
 
-      if (props.onFileFetch) {
-        try {
-          console.log("🚀 Calling props.onFileFetch with:", fileIds);
-          const result = await props.onFileFetch(fileIds);
-          console.log("✅ props.onFileFetch returned:", result);
-          return result;
-        } catch (error) {
-          console.error(
-            "❌ Custom file fetch failed in handleFileFetch:",
-            error,
-          );
-          return {
-            loadedFiles: [],
-            erroredFiles: new Map(fileIds.map((id) => [id, true as const])),
-          };
-        }
+    if (props.onFileFetch) {
+      try {
+        console.log("🚀 Calling props.onFileFetch with:", fileIds);
+        const result = await props.onFileFetch(fileIds);
+        console.log("✅ props.onFileFetch returned:", result);
+        return result;
+      } catch (error) {
+        console.error("❌ Custom file fetch failed in handleFileFetch:", error);
+        return {
+          loadedFiles: [],
+          erroredFiles: new Map(fileIds.map((id) => [id, true as const])),
+        };
       }
-      console.log("⚠️ No onFileFetch prop available, returning null");
-      return null;
-    },
-    [props.onFileFetch],
-  );
+    }
+    console.log("⚠️ No onFileFetch prop available, returning null");
+    return null;
+  };
 
   const handlePaste = useCallback(
     async (data: any, event: ClipboardEvent | null): Promise<boolean> => {
@@ -724,7 +718,13 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
       );
       // clearTimeout(titleTimeout);
     };
-  }, [collabAPI, excalidrawAPI, handleFileFetch, props.onFileFetch]);
+  }, [
+    collabAPI,
+    excalidrawAPI,
+    handleFileFetch,
+    props.onFileFetch,
+    isCollaborating,
+  ]);
 
   useEffect(() => {
     const unloadHandler = (event: BeforeUnloadEvent) => {
