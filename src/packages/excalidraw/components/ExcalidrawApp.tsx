@@ -84,8 +84,6 @@ export const initializeScene = async (opts: {
     | { isExternalScene: false; id?: null; key?: null }
   )
 > => {
-  console.log("🎬 initializeScene started with opts:", opts);
-
   const searchParams = new URLSearchParams(window.location.search);
   const id = searchParams.get("id");
   const jsonBackendMatch = window.location.hash.match(
@@ -100,10 +98,8 @@ export const initializeScene = async (opts: {
   } = await loadScene(null, null, localDataState);
 
   let roomLinkData = getCollaborationLinkData(window.location.href);
-  console.log("🔗 roomLinkData:", roomLinkData);
 
   const isExternalScene = !!(id || jsonBackendMatch || roomLinkData);
-  console.log("🌍 isExternalScene:", isExternalScene);
 
   if (isExternalScene) {
     if (
@@ -168,17 +164,7 @@ export const initializeScene = async (opts: {
   }
 
   if (roomLinkData) {
-    console.log("🤝 Starting collaboration with roomLinkData:", roomLinkData);
     const collabScene = await opts.collabAPI.startCollaboration(roomLinkData);
-    console.log("🤝 Collaboration scene loaded:", {
-      hasElements: !!collabScene?.elements?.length,
-      elementCount: collabScene?.elements?.length,
-      elements: collabScene?.elements?.map((el) => ({
-        type: el.type,
-        id: el.id,
-        fileId: isInitializedImageElement(el) ? (el as any).fileId : null,
-      })),
-    });
     return {
       scene: collabScene,
       isExternalScene: true,
@@ -199,7 +185,7 @@ export const initializeScene = async (opts: {
 };
 
 const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
-  console.log("🚀 ExcalidrawWrapper initialized with props:", {
+  props.onConsoleLog?.("🚀 ExcalidrawWrapper initialized with props:", {
     hasOnFileUpload: !!props.onFileUpload,
     hasOnFileFetch: !!props.onFileFetch,
     collabServerUrl: props.collabServerUrl,
@@ -217,7 +203,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
   // Custom file upload handling
   const handleGenerateIdForFile = useCallback(
     async (file: File): Promise<string> => {
-      console.log(
+      props.onConsoleLog?.(
         "📁 handleGenerateIdForFile called with file:",
         file.name,
         file.type,
@@ -227,7 +213,10 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
         try {
           // Use custom upload handler
           const fileId = await props.onFileUpload(file);
-          console.log("✅ Custom file upload successful, fileId:", fileId);
+          props.onConsoleLog?.(
+            "✅ Custom file upload successful, fileId:",
+            fileId,
+          );
           return fileId;
         } catch (error) {
           console.error("❌ Custom file upload failed:", error);
@@ -238,7 +227,10 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
       // Fall back to default behavior if no custom handler
       if (props.excalidraw.generateIdForFile) {
         const fileId = await props.excalidraw.generateIdForFile(file);
-        console.log("✅ Default generateIdForFile successful, fileId:", fileId);
+        props.onConsoleLog?.(
+          "✅ Default generateIdForFile successful, fileId:",
+          fileId,
+        );
         return fileId;
       }
 
@@ -246,7 +238,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
       const fileId = (await import("../../../data/blob")).generateIdFromFile(
         file,
       );
-      console.log(
+      props.onConsoleLog?.(
         "✅ Default blob generateIdFromFile successful, fileId:",
         fileId,
       );
@@ -279,14 +271,17 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
 
   // Custom image fetching for collaboration
   const handleFileFetch = async (fileIds: string[]) => {
-    console.log("🔄 handleFileFetch called with fileIds:", fileIds);
-    console.log("🔄 props.onFileFetch available:", !!props.onFileFetch);
+    props.onConsoleLog?.("🔄 handleFileFetch called with fileIds:", fileIds);
+    props.onConsoleLog?.(
+      "🔄 props.onFileFetch available:",
+      !!props.onFileFetch,
+    );
 
     if (props.onFileFetch) {
       try {
-        console.log("🚀 Calling props.onFileFetch with:", fileIds);
+        props.onConsoleLog?.("🚀 Calling props.onFileFetch with:", fileIds);
         const result = await props.onFileFetch(fileIds);
-        console.log("✅ props.onFileFetch returned:", result);
+        props.onConsoleLog?.("✅ props.onFileFetch returned:", result);
         return result;
       } catch (error) {
         console.error("❌ Custom file fetch failed in handleFileFetch:", error);
@@ -296,47 +291,50 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
         };
       }
     }
-    console.log("⚠️ No onFileFetch prop available, returning null");
+    props.onConsoleLog?.("⚠️ No onFileFetch prop available, returning null");
     return null;
   };
 
   const handlePaste = useCallback(
     async (data: any, event: ClipboardEvent | null): Promise<boolean> => {
-      console.log("📋 handlePaste called with data:", data);
+      props.onConsoleLog?.("📋 handlePaste called with data:", data);
 
       // If user provided custom paste handler, use it first
       if (props.excalidraw.onPaste) {
         const result = await props.excalidraw.onPaste(data, event);
         if (result === true) {
-          console.log("✅ Custom paste handler processed the paste");
+          props.onConsoleLog?.("✅ Custom paste handler processed the paste");
           return true; // Custom handler processed the paste
         }
       }
 
       // Handle image files if custom upload is available
       if (props.onFileUpload && data.files && data.files.length > 0) {
-        console.log("📋 Found files in paste data:", data.files.length);
+        props.onConsoleLog?.(
+          "📋 Found files in paste data:",
+          data.files.length,
+        );
         const imageFiles = data.files.filter((file: File) =>
           file.type.startsWith("image/"),
         );
-        console.log("🖼️ Image files in paste:", imageFiles.length);
+        props.onConsoleLog?.("🖼️ Image files in paste:", imageFiles.length);
 
         if (imageFiles.length > 0) {
           try {
             for (const file of imageFiles) {
-              console.log(
+              props.onConsoleLog?.(
                 "📋 Processing pasted image file:",
                 file.name,
                 file.type,
               );
               const fileId = await props.onFileUpload(file);
-              console.log("📋 Pasted image uploaded, fileId:", fileId);
+              props.onConsoleLog?.("📋 Pasted image uploaded, fileId:", fileId);
 
               if (excalidrawAPI) {
                 const reader = new FileReader();
                 reader.onload = () => {
                   const dataURL = reader.result as string;
-                  console.log(
+                  props.onConsoleLog?.(
                     "📋 Adding pasted image file to excalidraw:",
                     fileId,
                   );
@@ -360,7 +358,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
         }
       }
 
-      console.log("📋 No files processed in paste");
+      props.onConsoleLog?.("📋 No files processed in paste");
       return false;
     },
     [props.excalidraw.onPaste, props.onFileUpload],
@@ -370,11 +368,11 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
   const [, setCollabDialogShown] = useAtom(collabDialogShownAtom);
   const [isCollaborating] = useAtomWithInitialValue(isCollaboratingAtom, () => {
     const collaborating = isCollaborationLink(window.location.href);
-    console.log("🤝 isCollaborating initial value:", collaborating);
+    props.onConsoleLog?.("🤝 isCollaborating initial value:", collaborating);
     return collaborating;
   });
 
-  console.log("🤝 Current collaboration state:", {
+  props.onConsoleLog?.("🤝 Current collaboration state:", {
     isCollaborating,
     hasCollabAPI: !!collabAPI,
     hasExcalidrawAPI: !!excalidrawAPI,
@@ -386,14 +384,14 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
   });
 
   useEffect(() => {
-    console.log("🔄 Main useEffect triggered with:", {
+    props.onConsoleLog?.("🔄 Main useEffect triggered with:", {
       hasCollabAPI: !!collabAPI,
       hasExcalidrawAPI: !!excalidrawAPI,
       isCollaborating,
     });
 
     if (!collabAPI || !excalidrawAPI) {
-      console.log("⏭️ Skipping useEffect - missing APIs");
+      props.onConsoleLog?.("⏭️ Skipping useEffect - missing APIs");
       return;
     }
 
@@ -401,7 +399,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
       data: ResolutionType<typeof initializeScene>,
       isInitialLoad = false,
     ) => {
-      console.log("🖼️ loadImages called with:", {
+      props.onConsoleLog?.("🖼️ loadImages called with:", {
         hasScene: !!data.scene,
         isInitialLoad,
         isCollaborating: collabAPI.isCollaborating(),
@@ -410,15 +408,15 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
       });
 
       if (!data.scene) {
-        console.log("⏭️ No scene data, skipping loadImages");
+        props.onConsoleLog?.("⏭️ No scene data, skipping loadImages");
         return;
       }
 
       if (collabAPI.isCollaborating()) {
-        console.log("🤝 In collaboration mode, processing images...");
+        props.onConsoleLog?.("🤝 In collaboration mode, processing images...");
 
         if (data.scene.elements) {
-          console.log(
+          props.onConsoleLog?.(
             "📊 Scene elements:",
             data.scene.elements.map((el) => ({
               type: el.type,
@@ -432,7 +430,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
 
           // Try custom file fetch first if available
           if (props.onFileFetch) {
-            console.log(
+            props.onConsoleLog?.(
               "🔄 Custom onFileFetch available, filtering elements...",
             );
 
@@ -446,7 +444,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
                 const fileId = (element as any).fileId;
                 const notAlreadyLoaded = !currentFiles[fileId];
 
-                console.log("🔍 Element filter check:", {
+                props.onConsoleLog?.("🔍 Element filter check:", {
                   elementId: element.id,
                   type: element.type,
                   isImage,
@@ -462,19 +460,21 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
               })
               .map((element) => (element as any).fileId);
 
-            console.log("📥 FileIds to fetch in loadImages:", fileIds);
+            props.onConsoleLog?.("📥 FileIds to fetch in loadImages:", fileIds);
 
             if (fileIds.length > 0) {
-              console.log("🚀 Calling handleFileFetch from loadImages");
+              props.onConsoleLog?.(
+                "🚀 Calling handleFileFetch from loadImages",
+              );
               handleFileFetch(fileIds)
                 .then((response) => {
-                  console.log(
+                  props.onConsoleLog?.(
                     "✅ handleFileFetch response in loadImages:",
                     response,
                   );
                   if (response) {
                     const { loadedFiles, erroredFiles } = response;
-                    console.log("📁 Adding files to excalidraw:", {
+                    props.onConsoleLog?.("📁 Adding files to excalidraw:", {
                       loadedFilesCount: loadedFiles.length,
                       erroredFilesCount: erroredFiles.size,
                     });
@@ -494,17 +494,19 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
                   );
                 });
             } else {
-              console.log("⏭️ No fileIds to fetch in loadImages");
+              props.onConsoleLog?.("⏭️ No fileIds to fetch in loadImages");
             }
           } else {
-            console.log("🔄 No custom onFileFetch, falling back to Firebase");
+            props.onConsoleLog?.(
+              "🔄 No custom onFileFetch, falling back to Firebase",
+            );
             // Fall back to Firebase if no custom fetch
             collabAPI
               .fetchImageFilesFromFirebase({
                 elements: data.scene.elements,
               })
               .then((response) => {
-                console.log("🔥 Firebase fetch response:", response);
+                props.onConsoleLog?.("🔥 Firebase fetch response:", response);
                 if (!response) {
                   return;
                 }
@@ -519,10 +521,12 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
               });
           }
         } else {
-          console.log("⚠️ No elements in scene data");
+          props.onConsoleLog?.("⚠️ No elements in scene data");
         }
       } else {
-        console.log("🏠 Not in collaboration mode, handling local files...");
+        props.onConsoleLog?.(
+          "🏠 Not in collaboration mode, handling local files...",
+        );
         const fileIds =
           data.scene.elements?.reduce((acc, element) => {
             if (isInitializedImageElement(element)) {
@@ -572,9 +576,9 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
       }
     };
 
-    console.log("🎬 Calling initializeScene...");
+    props.onConsoleLog?.("🎬 Calling initializeScene...");
     initializeScene({ collabAPI }).then(async (data) => {
-      console.log("🎬 initializeScene completed with data:", {
+      props.onConsoleLog?.("🎬 initializeScene completed with data:", {
         hasScene: !!data.scene,
         isExternalScene: data.isExternalScene,
         sceneElementCount: data.scene?.elements?.length,
@@ -600,7 +604,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
     });
 
     const onHashChange = async (event: HashChangeEvent) => {
-      console.log("🔗 Hash change event:", event);
+      props.onConsoleLog?.("🔗 Hash change event:", event);
       event.preventDefault();
       const libraryUrlTokens = parseLibraryTokensFromUrl();
       if (!libraryUrlTokens) {
@@ -608,14 +612,14 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
           collabAPI.isCollaborating() &&
           !isCollaborationLink(window.location.href)
         ) {
-          console.log("🛑 Stopping collaboration due to hash change");
+          props.onConsoleLog?.("🛑 Stopping collaboration due to hash change");
           collabAPI.stopCollaboration(false);
         }
         excalidrawAPI.updateScene({ appState: { isLoading: true } });
 
-        console.log("🎬 Re-initializing scene due to hash change...");
+        props.onConsoleLog?.("🎬 Re-initializing scene due to hash change...");
         initializeScene({ collabAPI }).then((data) => {
-          console.log("🎬 Re-initialization completed:", data);
+          props.onConsoleLog?.("🎬 Re-initialization completed:", data);
           loadImages(data);
           if (data.scene) {
             excalidrawAPI.updateScene({
@@ -723,13 +727,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
       );
       // clearTimeout(titleTimeout);
     };
-  }, [
-    collabAPI,
-    excalidrawAPI,
-    handleFileFetch,
-    props.onFileFetch,
-    isCollaborating,
-  ]);
+  }, [collabAPI, excalidrawAPI, handleFileFetch, props, isCollaborating]);
 
   useEffect(() => {
     const unloadHandler = (event: BeforeUnloadEvent) => {
@@ -759,7 +757,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
       return;
     }
 
-    console.log("🔌 Calling getExcalidrawAPI callback");
+    props.onConsoleLog?.("🔌 Calling getExcalidrawAPI callback");
     props.getExcalidrawAPI(excalidrawAPI);
   }, [excalidrawAPI, props]);
 
@@ -768,7 +766,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
       return;
     }
 
-    console.log("🔌 Calling getCollabAPI callback");
+    props.onConsoleLog?.("🔌 Calling getCollabAPI callback");
     props.getCollabAPI(collabAPI);
   }, [collabAPI, props]);
 
@@ -777,7 +775,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
     appState: AppState,
     files: BinaryFiles,
   ) => {
-    console.log("🔄 onChange called with:", {
+    props.onConsoleLog?.("🔄 onChange called with:", {
       elementCount: elements.length,
       fileCount: Object.keys(files).length,
       isCollaborating: collabAPI?.isCollaborating(),
@@ -791,7 +789,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
     });
 
     if (collabAPI?.isCollaborating()) {
-      console.log("🤝 Syncing elements to collaboration");
+      props.onConsoleLog?.("🤝 Syncing elements to collaboration");
       collabAPI.syncElements(elements);
     }
 
@@ -818,7 +816,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
             });
 
           if (didChange) {
-            console.log("💾 Updating scene with saved status");
+            props.onConsoleLog?.("💾 Updating scene with saved status");
             excalidrawAPI.updateScene({
               elements,
             });
@@ -829,12 +827,12 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
 
     // Notify parent of file changes if callback provided
     if (props.onFilesChange) {
-      console.log("📁 Calling onFilesChange callback");
+      props.onConsoleLog?.("📁 Calling onFilesChange callback");
       props.onFilesChange(files);
     }
   };
 
-  console.log("🎨 Rendering ExcalidrawWrapper with:", {
+  props.onConsoleLog?.("🎨 Rendering ExcalidrawWrapper with:", {
     hasOnFileFetch: !!props.onFileFetch,
     isCollaborating,
     hasExcalidrawAPI: !!excalidrawAPI,
@@ -886,7 +884,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
 };
 
 export const ExcalidrawApp = (props: ExcalidrawAppProps) => {
-  console.log("🎯 ExcalidrawApp root called with props:", {
+  props.onConsoleLog?.("🎯 ExcalidrawApp root called with props:", {
     hasOnFileUpload: !!props.onFileUpload,
     hasOnFileFetch: !!props.onFileFetch,
     collabServerUrl: props.collabServerUrl,

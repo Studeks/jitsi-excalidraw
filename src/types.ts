@@ -337,6 +337,7 @@ export interface ExcalidrawAppProps {
   // Custom file upload support
   onFileUpload?: (file: File) => Promise<string>;
   onFilesChange?: (files: BinaryFiles) => void;
+  onConsoleLog?: (...args: any[]) => void;
   // Custom file fetch support for collaboration
   onFileFetch?: (fileIds: string[]) => Promise<{
     loadedFiles: BinaryFileData[];
