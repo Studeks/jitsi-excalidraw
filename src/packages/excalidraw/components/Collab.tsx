@@ -9,8 +9,11 @@ import {
 } from "../../../element/types";
 import { getSceneVersion, restoreElements } from "../../excalidraw/index";
 import {
+  BinaryFileData,
   Collaborator,
   CollabProps,
+  DataURL,
+  FileId,
   Gesture,
   UserIdleState,
 } from "../../../types";
@@ -669,6 +672,60 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     return reconciledElements;
   };
 
+  private fetchImages = async (fileIds: string[]) => {
+    const loadedFiles: BinaryFileData[] = [];
+    const erroredFiles = new Map<string, true>();
+
+    await Promise.all(
+      fileIds.map(async (fileId) => {
+        try {
+          const imageUrl = fileId.startsWith("http")
+            ? fileId
+            : `${this.props.collabServerUrl}/api/images/${fileId}`;
+
+          const response = await fetch(imageUrl);
+
+          if (!response.ok) {
+            throw new Error(`Failed to fetch image: ${response.statusText}`);
+          }
+
+          const blob = await response.blob();
+          const reader = new FileReader();
+
+          return new Promise<void>((resolve) => {
+            reader.onload = () => {
+              const dataURL = reader.result as string;
+              const mimeType =
+                (blob.type as
+                  | "image/png"
+                  | "image/jpeg"
+                  | "image/svg+xml"
+                  | "image/gif"
+                  | "application/octet-stream") || "image/png";
+              loadedFiles.push({
+                id: fileId as FileId,
+                dataURL: dataURL as DataURL,
+                mimeType: mimeType,
+                created: Date.now(),
+              });
+              resolve();
+            };
+            reader.onerror = () => {
+              erroredFiles.set(fileId, true as true);
+              resolve();
+            };
+            reader.readAsDataURL(blob);
+          });
+        } catch (error) {
+          console.error(`Failed to fetch image ${fileId}:`, error);
+          erroredFiles.set(fileId, true as true);
+        }
+      }),
+    );
+
+    return { loadedFiles, erroredFiles };
+  };
+
   private loadImageFiles = throttle(async () => {
     console.log(
       "🔍 loadImageFiles called, onFileFetch available:",
@@ -676,82 +733,60 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     );
 
     // Try custom file fetch first if available
-    if (this.props.onFileFetch) {
-      console.log("🚀 Using custom onFileFetch");
+    console.log("🚀 Using custom onFileFetch");
 
-      const elements = this.excalidrawAPI.getSceneElementsIncludingDeleted();
-      console.log("📊 Total elements:", elements.length);
+    const elements = this.excalidrawAPI.getSceneElementsIncludingDeleted();
+    console.log("📊 Total elements:", elements.length);
 
-      // Get current files to avoid re-fetching already loaded files
-      const currentFiles = this.excalidrawAPI.getFiles();
+    // Get current files to avoid re-fetching already loaded files
+    const currentFiles = this.excalidrawAPI.getFiles();
 
-      const unfetchedImages = elements
-        .filter((element) => {
-          const isImage = isInitializedImageElement(element);
-          const notDeleted = !element.isDeleted;
-          const fileId = (element as any).fileId;
-          // Check if file is already loaded in excalidraw
-          const notAlreadyLoaded = !currentFiles[fileId];
+    const unfetchedImages = elements
+      .filter((element) => {
+        const isImage = isInitializedImageElement(element);
+        const notDeleted = !element.isDeleted;
+        const fileId = (element as any).fileId;
+        // Check if file is already loaded in excalidraw
+        const notAlreadyLoaded = !currentFiles[fileId];
 
-          console.log("🔍 Element filter check:", {
-            fileId,
-            isImage,
-            notDeleted,
-            notAlreadyLoaded,
-            elementStatus: (element as any).status,
-            currentFilesKeys: Object.keys(currentFiles),
-          });
+        console.log("🔍 Element filter check:", {
+          fileId,
+          isImage,
+          notDeleted,
+          notAlreadyLoaded,
+          elementStatus: (element as any).status,
+          currentFilesKeys: Object.keys(currentFiles),
+        });
 
-          // Much more aggressive filtering - only check if it's an image, not deleted, and not already loaded
-          return isImage && notDeleted && notAlreadyLoaded;
-        })
-        .map((element) => (element as any).fileId);
+        // Much more aggressive filtering - only check if it's an image, not deleted, and not already loaded
+        return isImage && notDeleted && notAlreadyLoaded;
+      })
+      .map((element) => (element as any).fileId);
 
-      console.log("📥 Unfetched image fileIds:", unfetchedImages);
+    console.log("📥 Unfetched image fileIds:", unfetchedImages);
 
-      if (unfetchedImages.length > 0) {
-        try {
-          console.log("🚀 Calling onFileFetch with fileIds:", unfetchedImages);
-          const response = await this.props.onFileFetch(unfetchedImages);
-          console.log("✅ onFileFetch response:", response);
+    if (unfetchedImages.length > 0) {
+      try {
+        console.log("🚀 Calling onFileFetch with fileIds:", unfetchedImages);
+        const response = await this.fetchImages(unfetchedImages);
+        console.log("✅ onFileFetch response:", response);
 
-          const { loadedFiles, erroredFiles } = response;
+        const { loadedFiles, erroredFiles } = response;
 
-          this.excalidrawAPI.addFiles(loadedFiles);
+        this.excalidrawAPI.addFiles(loadedFiles);
 
-          updateStaleImageStatuses({
-            excalidrawAPI: this.excalidrawAPI,
-            erroredFiles: erroredFiles as any,
-            elements: this.excalidrawAPI.getSceneElementsIncludingDeleted(),
-          });
-        } catch (error) {
-          console.error("❌ Custom file fetch failed:", error);
-        }
-      } else {
-        console.log("⏭️ No unfetched images to load");
+        updateStaleImageStatuses({
+          excalidrawAPI: this.excalidrawAPI,
+          erroredFiles: erroredFiles as any,
+          elements: this.excalidrawAPI.getSceneElementsIncludingDeleted(),
+        });
+      } catch (error) {
+        console.error("❌ Custom file fetch failed:", error);
       }
-      return;
+    } else {
+      console.log("⏭️ No unfetched images to load");
     }
-
-    console.log("🔄 Falling back to Firebase fetchImageFilesFromFirebase");
-    const response = await this.fetchImageFilesFromFirebase({
-      elements: this.excalidrawAPI.getSceneElementsIncludingDeleted(),
-    });
-
-    if (!response) {
-      console.log("❌ No response from Firebase");
-      return;
-    }
-
-    console.log("✅ Firebase response:", response);
-    const { loadedFiles, erroredFiles } = response;
-    this.excalidrawAPI.addFiles(loadedFiles);
-
-    updateStaleImageStatuses({
-      excalidrawAPI: this.excalidrawAPI,
-      erroredFiles,
-      elements: this.excalidrawAPI.getSceneElementsIncludingDeleted(),
-    });
+    return;
   }, LOAD_IMAGES_TIMEOUT);
 
   private handleRemoteSceneUpdate = (
